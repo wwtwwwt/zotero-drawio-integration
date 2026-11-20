@@ -1,0 +1,254 @@
+.da-sidebar {
+  --da-tab-height: 33px;
+  --da-rule: color-mix(in srgb, currentColor 17%, transparent);
+  --da-hover: color-mix(in srgb, currentColor 8%, transparent);
+  --da-accent: #316dc2;
+}
+
+.geDarkMode .da-sidebar {
+  --da-accent: #a8c9ff;
+}
+
+.geSidebarContainer.da-sidebar:has(.geSidebarFooter) > div:first-child {
+  margin-top: var(--da-tab-height);
+  max-height: calc(100% - 44px - var(--da-tab-height));
+}
+
+.da-sidebar > [hidden],
+.da-sidebar.da-show-zotero > .geSidebarFooter {
+  display: none !important;
+}
+
+.da-tabs {
+  position: absolute;
+  z-index: 1;
+  inset: 0 0 auto;
+  height: var(--da-tab-height);
+  display: flex;
+  border-bottom: 1px solid var(--da-rule);
+  box-sizing: border-box;
+}
+
+.da-tabs button {
+  flex: 1;
+  padding: 0 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.da-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--da-accent);
+  color: var(--da-accent);
+  font-weight: 600;
+}
+
+.da-tabs button:hover,
+.da-block:hover {
+  background: var(--da-hover);
+}
+
+.da-panel {
+  position: absolute;
+  inset: var(--da-tab-height) 0 0;
+  overflow: auto;
+  padding: 9px 8px;
+  white-space: normal;
+  font-size: 12px;
+}
+
+.da-block {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 7px 6px 7px 8px;
+  border: 1px solid var(--da-rule);
+  border-inline-start: 3px solid #7092c3;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: grab;
+  overflow-wrap: anywhere;
+}
+
+.da-block.da-note {
+  border-inline-start-color: #c6a04f;
+}
+
+.da-block-title,
+.da-block-detail {
+  display: block;
+}
+
+.da-block-title {
+  line-height: 1.35;
+  font-weight: 600;
+  white-space: normal;
+}
+
+.da-block-detail {
+  margin-top: 3px;
+  opacity: .75;
+}
+
+.da-results > .da-block {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.da-status {
+  margin: 7px 0;
+  opacity: .78;
+}
+
+.da-status:empty {
+  display: none;
+}
+
+.da-sidebar :focus-visible {
+  outline: 2px solid var(--da-accent);
+  outline-offset: -2px;
+}
+
+.da-inspector {
+  --da-rule: color-mix(in srgb, currentColor 20%, transparent);
+  --da-hover: color-mix(in srgb, currentColor 7%, transparent);
+  margin: 8px 8px 0 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--da-rule);
+  white-space: normal;
+}
+
+.da-inspector h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.da-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 27px;
+  padding: 4px 6px;
+  border: 1px solid var(--da-rule);
+  border-radius: 4px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+}
+
+.da-input:focus-visible,
+.da-inspector button:focus-visible {
+  outline: 2px solid light-dark(#316dc2, #a8c9ff);
+  outline-offset: -2px;
+}
+
+.da-content,
+.da-mode {
+  display: grid;
+  gap: 3px;
+}
+
+.da-content textarea {
+  resize: vertical;
+  line-height: 1.4;
+  min-height: 68px;
+}
+
+.da-mode {
+  margin: 7px 0;
+}
+
+.da-folders {
+  box-sizing: border-box;
+  max-height: min(30vh, 210px);
+  overflow: auto;
+  margin-top: 6px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--da-rule);
+}
+
+.da-folders[hidden],
+.da-replace-picker[hidden] {
+  display: none;
+}
+
+.da-folder {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.da-folder button {
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  height: 25px;
+}
+
+.da-folder .da-folder-toggle {
+  width: 19px;
+  flex: 0 0 19px;
+  padding: 0;
+}
+
+.da-folder-toggle:disabled {
+  visibility: hidden;
+}
+
+.da-folder .da-folder-name {
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.da-folder-name[aria-current="true"] {
+  background: color-mix(in srgb, var(--da-accent) 14%, transparent);
+  color: var(--da-accent);
+}
+
+.da-folder button:hover,
+.da-action:hover {
+  background: var(--da-hover);
+}
+
+.da-inspector .da-action,
+.da-panel .da-action {
+  min-height: 26px;
+  margin: 6px 4px 0 0;
+  padding: 3px 6px;
+  border: 1px solid var(--da-rule);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.da-action[hidden] {
+  display: none;
+}
+
+.da-replace-picker {
+  margin-top: 6px;
+}
+
+.da-matches {
+  max-height: 200px;
+  overflow: auto;
+}
+
+.da-matches .da-block {
+  width: 100%;
+  margin-top: 4px;
+  cursor: pointer;
+}

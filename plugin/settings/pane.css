@@ -1,0 +1,47 @@
+#drawio-integration-settings {
+  max-width: 680px;
+}
+
+#drawio-integration-settings fieldset {
+  min-width: 0;
+  margin: 0 0 15px;
+  padding: 8px 0 12px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 19%, transparent);
+}
+
+#drawio-integration-settings legend {
+  padding: 0;
+  font-weight: 600;
+  font-size: 1.06em;
+}
+
+.drawio-pref-row {
+  display: grid;
+  grid-template-columns: minmax(9em, 1fr) minmax(9em, 1.15fr);
+  gap: 12px;
+  align-items: center;
+  margin-block: 5px;
+}
+
+.drawio-pref-row :is(input[type="text"], select) {
+  min-width: 0;
+  min-height: 27px;
+}
+
+.drawio-pref-row.drawio-pref-toggle {
+  grid-template-columns: auto 1fr;
+}
+
+.drawio-pref-hint {
+  color: color-mix(in srgb, currentColor 75%, transparent);
+  line-height: 1.4;
+  margin-block: 6px;
+}
+
+.drawio-pref-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}

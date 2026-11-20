@@ -1,0 +1,27 @@
+# Build outputs and caches
+.cache/
+dist/
+*.tmp
+*.xpi
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python local environments and tooling
+.venv/
+venv/
+env/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+
+# macOS and editor files
+.DS_Store
+*.swp
+*.swo
+*~
