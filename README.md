@@ -6,11 +6,11 @@
 
 **适用环境：** Zotero 10.0.x（最低 10.0.9） · **项目许可：** [AGPL-3.0-only](LICENSE)
 
-[安装](#安装) · [使用](#使用) · [设置](#设置) · [构建与测试](#构建与测试) · [许可证](#许可证)
+[安装](#安装) · [使用](#使用) · [设置](#设置) · [构建与测试](#构建与测试) · [发布](#发布) · [许可证](#许可证)
 
 ## 安装
 
-1. 获取发布的 `.xpi` 安装包，或按[构建说明](#构建与测试)在本地生成。
+1. 从 [GitHub Releases](https://github.com/wwtwwwt/zotero-drawio-integration/releases) 下载 `.xpi` 安装包，或按[构建说明](#构建与测试)在本地生成。
 2. 在 Zotero 中打开「工具 → 插件」，点击齿轮菜单中的「从文件安装插件」，选择 `.xpi` 文件。更新旧版时也使用这个入口。
 
 ## 使用
@@ -30,6 +30,17 @@ python3 scripts/build.py
 ```
 
 安装包生成在 `dist/`。测试在临时 Zotero 配置和文献库里运行两次冷启动，可用 `ZOTERO_BINARY` 指定 Zotero 可执行文件。
+
+## 发布
+
+在包含发布工作流的提交上打 `vX.Y.Z` 格式的标签，并把标签推送到 GitHub。例如：
+
+```sh
+git tag -a v0.4.1 -m 'Release v0.4.1'
+git push origin v0.4.1
+```
+
+GitHub Actions 会给 `v0.4.1` 创建 Release，并附上 `zotero-drawio-integration-0.4.1.xpi`。包内的插件版本也是 `0.4.1`。`plugin/manifest.json` 里的版本用于无标签的本地构建。要在本地预检正式包，可运行 `python3 scripts/build.py --release-tag v0.4.1`。
 
 ## 许可证
 

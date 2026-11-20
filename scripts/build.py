@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Build the Zotero plugin from the pinned upstream draw.io web distribution."""
 
+import argparse
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 from urllib.request import urlopen
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
@@ -29,6 +31,14 @@ EDITOR_CSP = (
     "font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; "
     "frame-src 'none'; form-action 'none'; base-uri 'none'"
 )
+RELEASE_TAG = re.compile(r"v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))")
+
+
+def release_version(tag):
+    match = RELEASE_TAG.fullmatch(tag)
+    if not match:
+        raise argparse.ArgumentTypeError("expected a release tag in the form vX.Y.Z")
+    return match[1]
 
 
 def download(url, path):
@@ -47,7 +57,7 @@ def add(package, name, data):
     package.writestr(ZipInfo(name), data, compress_type=ZIP_DEFLATED)
 
 
-def build():
+def build(version=None):
     cache = ROOT / ".cache"
     cache.mkdir(exist_ok=True)
     upstream = download(RELEASE, cache / f"draw-{VERSION}.war")
@@ -58,15 +68,20 @@ def build():
 
     plugin = ROOT / "plugin"
     manifest = json.loads((plugin / "manifest.json").read_text())
+    if version is not None:
+        manifest["version"] = version
     destination = ROOT / "dist" / f"{manifest['name']}-{manifest['version']}.xpi"
     destination.parent.mkdir(exist_ok=True)
     temporary = destination.with_suffix(".tmp")
     try:
         with ZipFile(temporary, "w") as package, ZipFile(upstream) as editor:
             add(package, "LICENSE", (ROOT / "LICENSE").read_bytes())
+            add(package, "manifest.json", (json.dumps(manifest, indent=2) + "\n").encode("utf-8"))
             for file in sorted(plugin.rglob("*")):
                 name = file.relative_to(plugin).as_posix()
-                if file.is_file() and (name not in BOOTSTRAP_SOURCES or name == "settings/options.js"):
+                if file.is_file() and name != "manifest.json" and (
+                    name not in BOOTSTRAP_SOURCES or name == "settings/options.js"
+                ):
                     add(package, name, file.read_bytes())
             add(package, "bootstrap.js", b"\n\n".join(
                 (plugin / name).read_bytes() for name in BOOTSTRAP_SOURCES
@@ -115,4 +130,7 @@ def build():
 
 
 if __name__ == "__main__":
-    build()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--release-tag", type=release_version, metavar="vX.Y.Z",
+                        help="set the packaged plugin version from a Git release tag")
+    build(parser.parse_args().release_tag)

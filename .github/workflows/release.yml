@@ -1,0 +1,40 @@
+name: Release Zotero plugin
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: ${{ !github.event.deleted }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.11'
+
+      - name: Build and verify the XPI
+        id: build
+        shell: bash
+        run: |
+          package="$(python3 scripts/build.py --release-tag "$GITHUB_REF_NAME")"
+          unzip -tq "$package"
+          printf 'package=%s\n' "$package" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          XPI: ${{ steps.build.outputs.package }}
+        run: gh release create "$GITHUB_REF_NAME" "$XPI" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
