@@ -23,7 +23,7 @@ ASSET_FOLDERS = {
 ASSET_FILES = {"index.html", "favicon.ico", "shortcuts.svg", "export-fonts.css"}
 BOOTSTRAP_SOURCES = (
     "settings/options.js", "editor-assets.js", "storage.js", "library-picker.js",
-    "zotero-ui.js", "editor-tab.js", "bootstrap.js",
+    "diagram-preview.js", "zotero-ui.js", "editor-tab.js", "bootstrap.js",
 )
 EDITOR_CSP = (
     "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; "

@@ -196,8 +196,9 @@ async function createDiagram(window, parent = null) {
   const libraryID = Zotero.Libraries.userLibraryID;
   const options = parent ? { parentItemID: parent.id } : { libraryID };
   if (!parent) {
-    const selected = pane.getSelectedCollections();
-    if (pane.getSelectedLibraryID() !== libraryID || selected.length > 1) {
+    const selected = selectedDiagramCollections(pane);
+    const libraries = pane.getSelectedLibraryIDs?.() ?? [pane.getSelectedLibraryID()];
+    if (libraries.length !== 1 || libraries[0] !== libraryID || selected.length > 1) {
       report(window, strings.chooseOne);
       return;
     }

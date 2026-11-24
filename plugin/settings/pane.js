@@ -13,7 +13,7 @@
     choices: {
       color: ["跟随系统", "浅色", "深色"], layout: ["经典", "Atlas"],
       language: ["跟随 Zotero", "简体中文", "English"], palette: ["Zotero", "图形"],
-      noteMode: ["复制正文，可直接编辑", "链接原笔记，只读"],
+      noteMode: ["不导入", "仅导入内容（可编辑）", "链接原笔记（只读）"],
     },
   } : {
     appearance: "Editor appearance", drawing: "Fonts and new diagrams", imports: "Papers and notes",
@@ -27,7 +27,7 @@
     choices: {
       color: ["System", "Light", "Dark"], layout: ["Classic", "Atlas"],
       language: ["Match Zotero", "简体中文", "English"], palette: ["Zotero", "Shapes"],
-      noteMode: ["Copy text, editable", "Link to original, read-only"],
+      noteMode: ["Do not import", "Copy text (editable)", "Link to original (read-only)"],
     },
   };
 
@@ -44,7 +44,7 @@
       group.append(legend);
       for (const key of keys) {
         const allowed = DrawioSettings.choices[key];
-        const field = document.createElement(allowed ? "select" : "input");
+        const field = allowed ? document.createXULElement("menulist") : document.createElement("input");
         field.id = "drawio-setting-" + key;
         const label = document.createElement("label");
         label.htmlFor = field.id;
@@ -54,12 +54,15 @@
         row.append(label, field);
         group.append(row);
         if (allowed) {
+          field.setAttribute("aria-label", copy[key]);
+          const popup = document.createXULElement("menupopup");
           for (const [index, option] of allowed.entries()) {
-            const entry = document.createElement("option");
-            entry.value = option;
-            entry.textContent = copy.choices[key][index];
-            field.append(entry);
+            const entry = document.createXULElement("menuitem");
+            entry.setAttribute("value", option);
+            entry.setAttribute("label", copy.choices[key][index]);
+            popup.append(entry);
           }
+          field.append(popup);
         } else if (key === "grid" || key === "pageView") {
           field.type = "checkbox";
           row.classList.add("drawio-pref-toggle");
@@ -70,7 +73,7 @@
           field.placeholder = key === "defaultFont" ? "Arial" : "Arial, PingFang SC";
           field.setAttribute("aria-describedby", "drawio-settings-fonts-hint");
         }
-        field.addEventListener(field.type === "text" ? "input" : "change", () => {
+        field.addEventListener(allowed ? "command" : field.type === "text" ? "input" : "change", () => {
           DrawioSettings.set(key, field.type === "checkbox" ? field.checked : field.value);
         });
         fields.set(key, field);

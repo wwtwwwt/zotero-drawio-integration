@@ -27,10 +27,27 @@ function mountDiagramUI(window) {
   const icon = editorAssets.origin + "/icons/diagram.png";
   const css = `
     .icon-item-type[data-item-type="${DIAGRAM_ICON_TYPE}"],
-    .row:has(.item-icon[data-item-type="${DIAGRAM_ICON_TYPE}"]) .icon-attachment-type[data-item-type="attachmentFile"],
-    attachment-preview[data-drawio-diagram] .icon {
+    .row:has(.item-icon[data-item-type="${DIAGRAM_ICON_TYPE}"]) .icon-attachment-type[data-item-type="attachmentFile"] {
       background: url("${icon}") no-repeat center / contain !important;
     }
+    attachment-preview[data-drawio-diagram] {
+      height: auto !important;
+      opacity: 1 !important;
+    }
+    attachment-preview[data-drawio-diagram] > :not(.drawio-diagram-preview, .drawio-diagram-preview-fallback, .drag-container) {
+      visibility: collapse !important;
+      position: absolute !important;
+      pointer-events: none;
+    }
+    .drawio-diagram-preview {
+      display: block;
+      width: 100%;
+      height: clamp(190px, 38vh, 400px);
+      border: 1px solid color-mix(in srgb, currentColor 17%, transparent);
+      border-radius: 5px;
+      box-sizing: border-box;
+    }
+    .drawio-diagram-preview-fallback { padding: 8px; }
     #${NEW_DIAGRAM_BUTTON} > .toolbarbutton-icon {
       width: 20px;
       height: 20px;
@@ -53,36 +70,11 @@ function mountDiagramUI(window) {
   const spacer = search?.previousElementSibling;
   toolbar?.insertBefore(button, spacer?.localName === "spacer" ? spacer : search);
 
-  let active = true;
-  let restorePreview = () => {};
-  // Keep Zotero's file-preview behavior and only change its placeholder art.
-  void window.customElements.whenDefined("attachment-preview").then(() => {
-    if (!active) return;
-    const prototype = window.customElements.get("attachment-preview").prototype;
-    const descriptor = Object.getOwnPropertyDescriptor(prototype, "item");
-    if (!descriptor?.set) return;
-    const set = function (item) {
-      descriptor.set.call(this, item);
-      this.toggleAttribute("data-drawio-diagram", isDiagram(item));
-    };
-    Object.defineProperty(prototype, "item", { ...descriptor, set });
-    for (const preview of document.querySelectorAll("attachment-preview")) {
-      preview.toggleAttribute("data-drawio-diagram", isDiagram(preview.item));
-    }
-    restorePreview = () => {
-      if (Object.getOwnPropertyDescriptor(prototype, "item")?.set === set) {
-        Object.defineProperty(prototype, "item", descriptor);
-      }
-      for (const preview of document.querySelectorAll("attachment-preview[data-drawio-diagram]")) {
-        preview.removeAttribute("data-drawio-diagram");
-      }
-    };
-  }).catch(Zotero.logError);
+  const removePreviews = mountDiagramPreviews(window);
   refreshDiagramIcons(window);
   return () => {
-    active = false;
     button.remove();
-    restorePreview();
+    removePreviews();
     if (!window.closed) {
       utils.removeSheetUsingURIString(sheet, utils.AUTHOR_SHEET);
       refreshDiagramIcons(window);
@@ -91,9 +83,18 @@ function mountDiagramUI(window) {
 }
 
 function refreshDiagramIcons(window) {
-  const itemTree = window.ZoteroPane?.itemsView?.itemTree;
-  itemTree?.invalidateRowCache(true);
+  const view = window.ZoteroPane?.itemsView;
+  if (!view) return;
+  const itemTree = view.itemTree ?? view;
+  if (itemTree.invalidateRowCache) itemTree.invalidateRowCache(true);
+  else if (itemTree._rowCache) itemTree._rowCache = {};
   itemTree?.tree?.invalidate();
+}
+
+function selectedDiagramCollections(pane) {
+  if (pane.getSelectedCollections) return pane.getSelectedCollections();
+  const collection = pane.getSelectedCollection();
+  return collection ? [collection] : [];
 }
 
 function registerDiagramSettings() {

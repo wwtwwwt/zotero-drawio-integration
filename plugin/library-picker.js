@@ -18,6 +18,8 @@ function itemSummary(item) {
     kind: note ? "note" : "paper",
     title: note ? item.getNoteTitle() : item.getDisplayTitle(),
     subtitle: note ? "" : [item.firstCreator, item.getField("year")].filter(Boolean).join(", "),
+    publisher: note ? "" : item.getField("publisher", false, true) ||
+      item.getField("publicationTitle") || item.getField("proceedingsTitle") || item.getField("repository"),
     link: libraryItemLinkPrefix(item.library) + item.key,
   };
 }
@@ -37,7 +39,7 @@ async function browseDiagramLibrary(session, collectionID, offset) {
     const owner = attachment.parentItem || attachment;
     await Zotero.Items.loadDataTypes([owner], ["collections"]);
     const membership = new Set(owner.getCollections());
-    const selected = session.window.ZoteroPane.getSelectedCollections().find(col => membership.has(col.id));
+    const selected = selectedDiagramCollections(session.window.ZoteroPane).find(col => membership.has(col.id));
     collectionID = selected?.id ?? collections.find(col => membership.has(col.id))?.id ?? 0;
   }
   const collection = collectionID ? Zotero.Collections.get(collectionID) : null;
@@ -58,23 +60,33 @@ async function browseDiagramLibrary(session, collectionID, offset) {
   return result;
 }
 
-async function searchDiagramLibrary(libraryID, query, papersOnly) {
+async function searchDiagramLibrary(libraryID, query, kind) {
   if (!query) return { items: [], more: false };
-  const search = new Zotero.Search();
-  search.libraryID = libraryID;
-  search.addCondition("quicksearch-titleCreatorYear", "contains", query);
-  search.addCondition("itemType", "isNot", "attachment");
-  search.addCondition("itemType", "isNot", "note");
-  const ids = await search.search();
-  if (!papersOnly) {
+  const ids = [];
+  if (kind !== "note") {
+    const papers = new Zotero.Search();
+    papers.libraryID = libraryID;
+    papers.addCondition("quicksearch-titleCreatorYear", "contains", query);
+    papers.addCondition("itemType", "isNot", "attachment");
+    papers.addCondition("itemType", "isNot", "note");
+    ids.push(...await papers.search());
+  }
+  if (kind !== "paper") {
     const notes = new Zotero.Search();
     notes.libraryID = libraryID;
     notes.addCondition("quicksearch-titleCreatorYearNote", "contains", query);
+    notes.addCondition("itemType", "is", "note");
     ids.push(...await notes.search());
   }
-  const items = (await Zotero.Items.getAsync([...new Set(ids)].slice(0, 40))).filter(canImportItem);
+  const pageSize = 40;
+  const matches = [];
+  for (let offset = 0; matches.length <= pageSize && offset < ids.length; offset += pageSize) {
+    const batch = await Zotero.Items.getAsync(ids.slice(offset, offset + pageSize));
+    matches.push(...batch.filter(canImportItem));
+  }
+  const items = matches.slice(0, pageSize);
   await Zotero.Items.loadDataTypes(items, ["itemData"]);
-  return { items: items.map(itemSummary), more: ids.length > 40 };
+  return { items: items.map(itemSummary), more: matches.length > pageSize };
 }
 
 function diagramNoteText(html) {
@@ -90,7 +102,7 @@ function diagramNoteText(html) {
   return fragment.textContent.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-async function getDiagramImport(libraryID, key) {
+async function getDiagramImport(libraryID, key, includeNotes) {
   const item = await resolveDiagramItem(libraryID, key);
   if (!item) throw new Error("Item is unavailable");
   await Zotero.Items.loadDataTypes([item], ["itemData"]);
@@ -99,6 +111,7 @@ async function getDiagramImport(libraryID, key) {
     await Zotero.Items.loadDataTypes([item], ["note"]);
     return { item: { ...summary, content: diagramNoteText(item.getNote()) }, notes: [] };
   }
+  if (!includeNotes) return { item: summary, notes: [] };
 
   await Zotero.Items.loadDataTypes([item], ["childItems"]);
   const notes = (await Zotero.Items.getAsync(item.getNotes())).filter(canImportItem);

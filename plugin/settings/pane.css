@@ -24,7 +24,7 @@
   margin-block: 5px;
 }
 
-.drawio-pref-row :is(input[type="text"], select) {
+.drawio-pref-row :is(input[type="text"], menulist) {
   min-width: 0;
   min-height: 27px;
 }

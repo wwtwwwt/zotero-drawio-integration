@@ -12,7 +12,7 @@ from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = json.loads((ROOT / "plugin/manifest.json").read_text())
-XPI = ROOT / "dist" / f"{MANIFEST['name']}-{MANIFEST['version']}.xpi"
+XPI = Path(os.environ.get("ZOTERO_XPI", ROOT / "dist" / f"{MANIFEST['name']}-{MANIFEST['version']}.xpi"))
 ZOTERO = os.environ.get("ZOTERO_BINARY", "/Applications/Zotero.app/Contents/MacOS/zotero")
 
 
@@ -89,7 +89,7 @@ def run(profile):
                 if message.endswith("DONE\n"):
                     print(message.removesuffix("DONE\n"), end="", flush=True)
                     if "\nFAIL " in "\n" + message:
-                        raise SystemExit("Zotero smoke test failed")
+                        raise SystemExit("Zotero smoke test failed\n" + runtime.read_text()[-6000:])
                     return
                 time.sleep(0.25)
             message = result.read_text() if result.exists() else ""

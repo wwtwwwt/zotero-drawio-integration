@@ -4,20 +4,24 @@
   const zh = new URLSearchParams(window.location.search).get("lang") === "zh";
   const text = zh ? {
     shapes: "图形", paper: "论文块", note: "笔记块", library: "文献库",
-    search: "搜索文献或笔记", searchPaper: "搜索要替换的论文", loading: "正在加载…",
+    search: "搜索文献或笔记", searchPaper: "按标题、作者或年份搜索论文",
+    searchNote: "按正文搜索笔记", loading: "正在加载…",
     empty: "没有可导入的条目", failed: "无法读取条目，请重试", more: "加载更多",
     refine: "缩小搜索范围以查看其他结果", untitled: "无标题", expand: "展开或折叠",
     open: "定位到 Zotero", openPaper: "打开原论文", changePaper: "换一篇论文",
-    cancel: "取消", content: "显示内容", noteMode: "导入笔记",
-    copy: "复制内容 · 可编辑", linked: "链接原笔记 · 只读", readOnly: "链接笔记 · 只读",
+    changeNote: "替换笔记", cancel: "取消", content: "显示内容", noteMode: "导入笔记选项",
+    noteModeHint: "导入论文时选择是否附带子笔记。直接导入笔记时，“不导入”按可编辑副本处理。",
+    none: "不导入", copy: "仅导入内容（可编辑）", linked: "链接原笔记（只读）", readOnly: "链接笔记 · 只读",
   } : {
     shapes: "Shapes", paper: "Paper block", note: "Note block", library: "Library",
-    search: "Search papers or notes", searchPaper: "Find a replacement paper", loading: "Loading…",
+    search: "Search papers or notes", searchPaper: "Search papers by title, author, or year",
+    searchNote: "Search note text", loading: "Loading…",
     empty: "No items to import", failed: "Could not read the item. Try again.", more: "Load more",
     refine: "Refine your search for more results", untitled: "Untitled", expand: "Expand or collapse",
     open: "Show in Zotero", openPaper: "Open original paper", changePaper: "Replace paper",
-    cancel: "Cancel", content: "Display text", noteMode: "Import notes",
-    copy: "Copy content · editable", linked: "Link to original · read-only", readOnly: "Linked note · read-only",
+    changeNote: "Replace note", cancel: "Cancel", content: "Display text", noteMode: "Import notes",
+    noteModeHint: "Controls which child notes come with a paper. Importing a note directly still creates an editable copy in Do not import mode.",
+    none: "Do not import", copy: "Copy text (editable)", linked: "Link to original (read-only)", readOnly: "Linked note · read-only",
   };
   const referenceLink = /^zotero:\/\/select\/(?:library|groups\/\d+)\/items\/[A-Z0-9]{8}$/;
   const styles = {
@@ -96,15 +100,24 @@
     return mxUtils.htmlEntities(content).replace(/\r?\n/g, "<br>");
   }
 
+  function withPublisher(label, publisher) {
+    if (!publisher) return label;
+    return label + '<div class="da-publisher-label" style="margin-top:4px">' +
+      '<span style="font-size:10px;padding:1px 4px;border:1px solid #7092c3;border-radius:3px">' +
+      encodeLines(publisher) + "</span></div>";
+  }
+
   function itemLabel(item) {
     if (item.kind === "note" && item.content != null) return encodeLines(item.content);
-    return encodeLines(item.title || text.untitled) +
+    const label = encodeLines(item.title || text.untitled) +
       (item.subtitle ? '<br><span style="font-size: 11px">' + encodeLines(item.subtitle) + "</span>" : "");
+    return withPublisher(label, item.publisher);
   }
 
   function titleOfLabel(label) {
     const template = element("template", "");
     template.innerHTML = label;
+    template.content.querySelector(".da-publisher-label")?.remove();
     for (const line of template.content.querySelectorAll("br")) line.replaceWith("\n");
     for (const block of template.content.querySelectorAll("p, div")) block.after("\n");
     return template.content.textContent;
@@ -118,9 +131,10 @@
     const locked = note && noteMode === "linked" && referenceLink.test(item.link);
     if ((!note || locked) && referenceLink.test(item.link)) value.setAttribute("link", item.link);
     if (locked) value.setAttribute("zoteroNoteMode", "linked");
+    if (item.publisher) value.setAttribute("zoteroPublisher", item.publisher);
     const height = note ? Math.max(82, Math.min(380,
       26 + 18 * (item.content || "").split("\n").reduce((lines, line) =>
-        lines + Math.max(1, Math.ceil(line.length / 30)), 0))) : 98;
+        lines + Math.max(1, Math.ceil(line.length / 30)), 0))) : item.publisher ? 118 : 98;
     const font = Editor.config?.zoteroDefaultFont;
     const style = styles[item.kind] + "whiteSpace=wrap;html=1;overflow=hidden;align=left;" +
       "verticalAlign=top;spacing=10;fontSize=13;" + (locked ? "editable=0;" : "") +
@@ -156,6 +170,7 @@
     row.title = item.title || text.untitled;
     row.append(element("span", "da-block-title", row.title));
     if (item.subtitle) row.append(element("span", "da-block-detail", item.subtitle));
+    if (item.publisher) row.append(element("span", "da-block-publisher", item.publisher));
     return row;
   }
 
@@ -174,7 +189,7 @@
       const noteMode = mode.value;
       graph.stopEditing(false);
       try {
-        const data = await request("import", { key: item.key });
+        const data = await request("import", { key: item.key, includeNotes: noteMode !== "none" });
         if (page !== ui.currentPage || !graph.isEnabled() || ui.isLocked()) return;
         const cell = makeImportCell(graph, data, noteMode);
         const drop = sidebar.createDropHandler([cell], false, true,
@@ -243,12 +258,16 @@
     status.setAttribute("role", "status");
     const more = element("button", "da-action", text.more);
     more.hidden = true;
-    const modeLabel = element("label", "da-mode", text.noteMode);
+    const modeLabel = element("label", "da-mode");
+    modeLabel.title = text.noteModeHint;
+    const modeCaption = element("span", "", text.noteMode);
     const mode = element("select", "da-input");
-    mode.append(new Option(text.copy, "copy"), new Option(text.linked, "linked"));
-    mode.value = Editor.config?.zoteroNoteMode === "linked" ? "linked" : "copy";
-    modeLabel.append(mode);
-    panel.append(search, folders, modeLabel, results, status, more);
+    for (const choice of ["none", "copy", "linked"]) mode.append(new Option(text[choice], choice));
+    mode.value = Editor.config?.zoteroNoteMode ?? "copy";
+    modeLabel.append(modeCaption, mode);
+    const scroll = element("div", "da-library-scroll");
+    scroll.append(search, folders, results, status, more);
+    panel.append(scroll, modeLabel);
     container.append(tabs, panel);
     active(Editor.config?.zoteroPalette !== "shapes");
 
@@ -344,6 +363,68 @@
     void load();
   }
 
+  function chooseReplacement(kind, apply) {
+    const dialog = element("dialog", "da-replace-picker");
+    const title = element("h2", "", kind === "paper" ? text.changePaper : text.changeNote);
+    dialog.setAttribute("aria-label", title.textContent);
+    const search = searchInput(kind === "paper" ? text.searchPaper : text.searchNote);
+    const matches = element("div", "da-matches");
+    const status = element("p", "da-status");
+    status.setAttribute("role", "status");
+    const footer = element("footer", "");
+    const cancel = element("button", "da-action", text.cancel);
+    cancel.addEventListener("click", () => dialog.close());
+    footer.append(cancel);
+    dialog.append(title, search, matches, status, footer);
+
+    let generation = 0;
+    let timer;
+    let applying = false;
+    search.addEventListener("input", () => {
+      const version = ++generation;
+      clearTimeout(timer);
+      matches.replaceChildren();
+      const query = search.value.trim();
+      status.textContent = query ? text.loading : "";
+      if (!query) return;
+      timer = setTimeout(async () => {
+        try {
+          const data = await request("search", { query, kind });
+          if (version !== generation || !dialog.open) return;
+          status.textContent = data.items.length ? (data.more ? text.refine : "") : text.empty;
+          for (const item of data.items) {
+            const candidate = itemRow(item);
+            candidate.addEventListener("click", async () => {
+              if (applying || !dialog.open) return;
+              applying = true;
+              const stillOpen = () => dialog.open && version === generation;
+              try {
+                if (await apply(item, stillOpen) && stillOpen()) dialog.close();
+              } catch (error) {
+                console.error(error);
+                if (stillOpen()) status.textContent = text.failed;
+              } finally {
+                applying = false;
+              }
+            });
+            matches.append(candidate);
+          }
+        } catch {
+          if (version === generation && dialog.open) status.textContent = text.failed;
+        }
+      }, 180);
+    });
+    dialog.addEventListener("keydown", event => event.stopPropagation());
+    dialog.addEventListener("close", () => {
+      clearTimeout(timer);
+      dialog.remove();
+    }, { once: true });
+    document.body.append(dialog);
+    dialog.showModal();
+    search.focus();
+    return dialog;
+  }
+
   function mountInspector(ui) {
     const graph = ui.editor.graph;
     const format = ui.format;
@@ -352,22 +433,24 @@
     let boundValue;
     let boundLocked;
     let section;
+    let replacement;
+
+    const selectedBlock = () => {
+      const cell = graph.getSelectionCount() === 1 ? graph.getSelectionCell() : null;
+      return kindOf(cell) === "paperGroup"
+        ? graph.model.getChildren(cell)?.find(child => kindOf(child) === "paper")
+        : cell;
+    };
 
     const createInspector = (cell, locked) => {
       const kind = kindOf(cell);
       const panel = element("section", "da-inspector");
       const link = graph.getLinkForCell(cell);
-      const readonly = linkedNote(graph, cell) || locked;
-      panel.append(element("h3", "", linkedNote(graph, cell) ? text.readOnly : text[kind]));
-
-      const updateValue = (label, nextLink) => {
-        if (!graph.model.contains(cell) || !graph.isEnabled() || ui.isLocked() ||
-            graph.isCellLocked(cell) || linkedNote(graph, cell)) return;
-        const value = cell.value.cloneNode(true);
-        value.setAttribute("label", label);
-        if (nextLink) value.setAttribute("link", nextLink);
-        if (!value.isEqualNode(cell.value)) graph.model.setValue(cell, value);
-      };
+      const linked = linkedNote(graph, cell);
+      const readonly = linked || locked;
+      panel.append(element("h3", "", linked ? text.readOnly : text[kind]));
+      const canUpdate = () => graph.model.contains(cell) && graph.isEnabled() &&
+        !ui.isLocked() && !graph.isCellLocked(cell);
 
       const contentLabel = element("label", "da-content", text.content);
       const content = element("textarea", "da-input");
@@ -376,7 +459,11 @@
       content.defaultValue = content.value;
       content.readOnly = readonly;
       content.addEventListener("change", () => {
-        if (content.value !== content.defaultValue) updateValue(encodeLines(content.value));
+        if (readonly || !canUpdate() || content.value === content.defaultValue) return;
+        const value = cell.value.cloneNode(true);
+        value.setAttribute("label", withPublisher(encodeLines(content.value), value.getAttribute("zoteroPublisher")));
+        if (!value.isEqualNode(cell.value)) graph.model.setValue(cell, value);
+        content.defaultValue = content.value;
       });
       contentLabel.append(content);
       panel.append(contentLabel);
@@ -387,47 +474,24 @@
         panel.append(open);
       }
 
-      if (kind === "paper" && !readonly) {
-        const change = element("button", "da-action da-replace", text.changePaper);
-        const picker = element("div", "da-replace-picker");
-        picker.hidden = true;
-        const search = searchInput(text.searchPaper);
-        const matches = element("div", "da-matches");
-        picker.append(search, matches);
-        let generation = 0;
-        let timer;
+      if (!locked) {
+        const change = element("button", "da-action da-replace", kind === "paper" ? text.changePaper : text.changeNote);
         change.addEventListener("click", () => {
-          picker.hidden = !picker.hidden;
-          change.textContent = picker.hidden ? text.changePaper : text.cancel;
-          if (!picker.hidden) search.focus();
+          if (replacement?.open) return;
+          replacement = chooseReplacement(kind, async (candidate, stillOpen) => {
+            const item = kind === "note" ? (await request("import", { key: candidate.key })).item : candidate;
+            if (!stillOpen() || !canUpdate() || selectedBlock() !== cell) return false;
+            if (item.kind !== kind || !referenceLink.test(item.link)) throw new Error("Replacement is unavailable");
+            const value = cell.value.cloneNode(true);
+            value.setAttribute("label", itemLabel(item));
+            if (kind === "paper" || linked) value.setAttribute("link", item.link);
+            if (item.publisher) value.setAttribute("zoteroPublisher", item.publisher);
+            else value.removeAttribute("zoteroPublisher");
+            graph.model.setValue(cell, value);
+            return true;
+          });
         });
-        search.addEventListener("input", () => {
-          const version = ++generation;
-          clearTimeout(timer);
-          matches.replaceChildren();
-          const query = search.value.trim();
-          if (!query) return;
-          timer = setTimeout(async () => {
-            try {
-              const data = await request("search", { query, papersOnly: true });
-              if (version !== generation || !panel.isConnected) return;
-              for (const item of data.items) {
-                const candidate = itemRow(item);
-                candidate.addEventListener("click", () => {
-                  updateValue(itemLabel(item), item.link);
-                  picker.hidden = true;
-                  change.textContent = text.changePaper;
-                });
-                matches.append(candidate);
-              }
-              if (!data.items.length) matches.textContent = text.empty;
-              else if (data.more) matches.append(element("p", "da-status", text.refine));
-            } catch {
-              if (version === generation) matches.textContent = text.failed;
-            }
-          }, 180);
-        });
-        panel.append(change, picker);
+        panel.append(change);
       }
       return panel;
     };
@@ -435,10 +499,8 @@
     const refresh = format.immediateRefresh;
     format.immediateRefresh = function () {
       refresh.apply(this, arguments);
-      const selected = graph.getSelectionCount() === 1 ? graph.getSelectionCell() : null;
-      const cell = kindOf(selected) === "paperGroup"
-        ? graph.model.getChildren(selected)?.find(child => kindOf(child) === "paper")
-        : selected;
+      const cell = selectedBlock();
+      if (cell !== boundCell && replacement?.open) replacement.close();
       const kind = kindOf(cell);
       if (kind !== "paper" && kind !== "note") {
         section?.remove();

@@ -1,0 +1,70 @@
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: Canvas;
+  color: CanvasText;
+  font: 12px system-ui, sans-serif;
+}
+
+main {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+}
+
+#diagram {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: none;
+}
+
+#diagram > svg {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+#status {
+  grid-area: 1 / 1;
+  place-self: center;
+  margin: 0;
+  text-align: center;
+}
+
+nav:not([hidden]) {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-top: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  text-align: center;
+}
+
+#page {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+nav button {
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: 16px system-ui, sans-serif;
+}
+
+nav button:disabled {
+  opacity: .4;
+}

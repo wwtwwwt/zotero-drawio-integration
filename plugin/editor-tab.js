@@ -29,6 +29,12 @@ const STRINGS = {
     createFailed: "Could not create the diagram.",
     openFailed: "Could not open the diagram.",
     referenceMissing: "This Zotero item is no longer available.",
+    preview: "Diagram preview",
+    previewFailed: "Could not preview this diagram.",
+    previewMissing: "Download the attachment to preview it.",
+    previewBlank: "This page is empty.",
+    previewPrevious: "Previous page",
+    previewNext: "Next page",
   },
   zh: {
     newStandalone: "新建独立流程图…",
@@ -56,6 +62,12 @@ const STRINGS = {
     createFailed: "无法新建流程图。",
     openFailed: "无法打开流程图。",
     referenceMissing: "无法找到对应的 Zotero 条目。",
+    preview: "流程图预览",
+    previewFailed: "无法预览此流程图。",
+    previewMissing: "下载附件后即可预览。",
+    previewBlank: "此页为空白。",
+    previewPrevious: "上一页",
+    previewNext: "下一页",
   },
 };
 const isChinese = Services.locale.appLocaleAsBCP47.startsWith("zh");
@@ -202,7 +214,7 @@ class DiagramTab {
     } catch {
       return;
     }
-    const { id, operation, query, papersOnly, collectionID, offset, key } = request ?? {};
+    const { id, operation, query, kind, collectionID, offset, key, includeNotes } = request ?? {};
     if (!Number.isSafeInteger(id)) return;
     const generation = this.searchGeneration;
     const libraryID = this.file.item.libraryID;
@@ -212,9 +224,9 @@ class DiagramTab {
           Number.isSafeInteger(offset) && offset >= 0) {
         result = await browseDiagramLibrary(this, collectionID, offset);
       } else if (operation === "search" && typeof query === "string") {
-        result = await searchDiagramLibrary(libraryID, query.trim().slice(0, 200), papersOnly === true);
+        result = await searchDiagramLibrary(libraryID, query.trim().slice(0, 200), kind);
       } else if (operation === "import") {
-        result = await getDiagramImport(libraryID, key);
+        result = await getDiagramImport(libraryID, key, includeNotes === true);
       } else {
         return;
       }
@@ -325,6 +337,7 @@ class DiagramTab {
     if (this.pending === xml) this.pending = null;
     await this.file.clearRecovery();
     this.render();
+    void Zotero.Notifier.trigger("refresh", "item", [this.file.item.id]).catch(Zotero.logError);
   }
 
   snapshot() {

@@ -39,7 +39,8 @@ async function testDiagramAttachments() {
   try {
     const window = await until(Zotero.getMainWindow, "Zotero did not create a main window");
     const pane = window.ZoteroPane;
-    await until(() => pane.itemsView?.collectionTreeRows?.length, "The library did not load");
+    await until(() => pane.itemsView?.collectionTreeRows?.length || pane.itemsView?.collectionTreeRow,
+      "The library did not load");
     const tabs = window.Zotero_Tabs;
     const libraryID = Zotero.Libraries.userLibraryID;
     // Reproduce the blank-tab failure when the host document's event never
@@ -70,6 +71,12 @@ async function testDiagramAttachments() {
     const values = ui => {
       const graph = ui.editor.graph;
       return Array.from(graph.getChildVertices(graph.getDefaultParent()), cell => cell.value);
+    };
+    const selectedPreview = () => window.document.querySelector("attachment-box .drawio-diagram-preview");
+    const previewContent = state => {
+      const browser = selectedPreview();
+      const content = browser?.contentDocument;
+      return content?.documentElement?.dataset.drawioPreview === state && content;
     };
 
     if (await IOUtils.exists(phasePath)) {
@@ -109,6 +116,8 @@ async function testDiagramAttachments() {
       assert(pdfTab && Zotero.Reader.getByTabID(pdfTab), "The native PDF reader did not open");
       tabs.close(pdfTab);
 
+      await pane.selectItem(child.id);
+      await until(() => previewContent("rendered"), "The child preview did not render after restart");
       const pluginOpen = Zotero.FileHandlers.open;
       const diagramIcon = child.getItemTypeIconName();
       const { AddonManager } = ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");
@@ -116,6 +125,7 @@ async function testDiagramAttachments() {
       await until(() => Zotero.FileHandlers.open !== pluginOpen, "Disabling did not restore Zotero's file handler");
       assert(!window.document.getElementById(NEW_DIAGRAM_BUTTON) && child.getItemTypeIconName() !== diagramIcon,
         "Disabling did not remove the toolbar button and custom icon");
+      await until(() => !selectedPreview(), "Disabling did not remove the diagram preview");
       assert(await IOUtils.exists(await child.getFilePathAsync()), "Disabling removed the original file");
       assert(!attempts.length, "Editor requested external resources: " + attempts.join(", "));
       await log("PASS persistent preferences, restart, retry, recovery, native PDF reader, and disable");
@@ -133,6 +143,7 @@ async function testDiagramAttachments() {
     await pane.collectionsView.selectCollection(collection.id);
     const article = new Zotero.Item("journalArticle");
     article.setField("title", "Smoke article");
+    article.setField("publicationTitle", "Test Journal");
     article.addToCollection(collection.id);
     await article.saveTx();
 
@@ -142,6 +153,7 @@ async function testDiagramAttachments() {
       Zotero.DragDrop.currentDropEffect = "copy";
       await view.onDrop({ dataTransfer: {
         types: [type],
+        dropEffect: "copy",
         getData: () => data,
         mozItemCount: 1,
         mozGetDataAt: () => data,
@@ -162,21 +174,34 @@ async function testDiagramAttachments() {
     const preferences = Zotero.Utilities.Internal.openPreferences(DrawioSettings.paneID);
     const field = key => preferences.document.getElementById("drawio-setting-" + key);
     await until(() => field("noteMode"), "The settings controls did not load");
-    const setPreference = (key, value) => {
+    const setPreference = async (key, value) => {
       const input = field(key);
+      if (input.localName === "menulist") {
+        const popup = input.querySelector("menupopup");
+        const rect = input.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        preferences.windowUtils.sendMouseEvent("mousedown", x, y, 0, 1, 0);
+        preferences.windowUtils.sendMouseEvent("mouseup", x, y, 0, 1, 0);
+        await until(() => popup.state === "open", "The " + key + " dropdown did not open on click");
+        const item = popup.querySelector('[value="' + value + '"]');
+        popup.activateItem(item);
+        await until(() => DrawioSettings.get()[key] === value, "The " + key + " dropdown did not save");
+        return;
+      }
       if (input.type === "checkbox") input.checked = value;
       else input.value = value;
       input.dispatchEvent(new preferences.Event(input.type === "text" ? "input" : "change"));
     };
-    setPreference("color", "dark");
-    setPreference("layout", "atlas");
-    setPreference("language", "en");
-    setPreference("palette", "shapes");
-    setPreference("defaultFont", "Georgia");
-    setPreference("customFonts", "Arial, PingFang SC");
-    setPreference("grid", false);
-    setPreference("pageView", false);
-    setPreference("noteMode", "linked");
+    await setPreference("color", "dark");
+    await setPreference("layout", "atlas");
+    await setPreference("language", "en");
+    await setPreference("palette", "shapes");
+    await setPreference("defaultFont", "Georgia");
+    await setPreference("customFonts", "Arial, PingFang SC");
+    await setPreference("grid", false);
+    await setPreference("pageView", false);
+    await setPreference("noteMode", "linked");
     assert(DrawioSettings.get().defaultFont === "Georgia" && !DrawioSettings.get().pageView,
       "The settings controls did not save their changes");
 
@@ -212,18 +237,26 @@ async function testDiagramAttachments() {
     await closeTab(standalone);
     await pane.selectItem(diagram.id);
     const itemIcon = await until(() => window.document.querySelector(
-      '.item-icon[data-item-type="' + DIAGRAM_ICON_TYPE + '"]'), "The diagram item icon was not rendered");
+      '.icon-item-type[data-item-type="' + DIAGRAM_ICON_TYPE + '"]'), "The diagram item icon was not rendered");
     assert(window.getComputedStyle(itemIcon).backgroundImage.includes("/icons/diagram.png"),
       "The diagram icon stylesheet did not apply");
-    const previewIcon = await until(() => window.document.querySelector("attachment-preview[data-drawio-diagram] .icon"),
-      "The attachment pane did not render the diagram placeholder");
-    assert(window.getComputedStyle(previewIcon).backgroundImage.includes("/icons/diagram.png"),
-      "The attachment pane showed the generic file icon");
+    await until(() => previewContent("blank"), "The attachment pane did not show the blank diagram").catch(error => {
+      const browser = selectedPreview();
+      const content = browser?.contentDocument;
+      throw new Error(error.message + "\n" + JSON.stringify({
+        browser: browser?.outerHTML,
+        document: content?.documentURI,
+        status: content?.getElementById("status")?.textContent,
+        state: content?.documentElement?.outerHTML.slice(0, 400),
+        nativePreview: window.document.querySelector("attachment-box attachment-preview")?.outerHTML.slice(0, 400),
+      }));
+    });
+    assert(!selectedPreview().contentPrincipal.isSystemPrincipal, "The preview has system privileges");
     preferences.document.querySelector(".drawio-pref-footer button").click();
     assert(DrawioSettings.get().color === "system" && !DrawioSettings.get().defaultFont &&
       field("layout").value === "kennedy", "Restore defaults did not reset saved settings and controls");
     preferences.close();
-    await log("PASS toolbar creation, item/tab/preview icons, settings pane, editor appearance, and restore defaults");
+    await log("PASS toolbar creation, icons, blank preview, settings popup, editor appearance, and restore defaults");
 
     await pane.selectItem(article.id);
     await pane.buildItemContextMenu();
@@ -296,10 +329,21 @@ async function testDiagramAttachments() {
     const cells = (g = graph, parent = g.getDefaultParent()) =>
       Array.from(g.getChildVertices(parent)).flatMap(cell => [cell, ...cells(g, cell)]);
     const byLink = (link, g = graph) => cells(g).find(cell => g.getLinkForCell(cell) === link);
-    panel.querySelector("select").value = "linked";
+    const mode = panel.querySelector("select");
+    assert(mode.closest(".da-mode") === panel.lastElementChild &&
+      Array.from(mode.options, option => option.value).join() === "none,copy,linked",
+    "The three import modes are not in the panel footer");
     const paperResult = Array.from(panel.querySelectorAll(".da-results .da-paper"))
       .find(row => row.textContent.includes("Smoke article"));
-    assert(paperResult, "The article is missing from the selected collection");
+    assert(paperResult?.querySelector(".da-block-publisher")?.textContent === "Test Journal",
+      "The article or publisher tag is missing from the selected collection");
+    mode.value = "none";
+    paperResult.click();
+    const paperOnly = await until(() => byLink(paperLink), "Paper-only mode did not insert a paper");
+    assert(paperOnly.getParent() === graph.getDefaultParent() && cells().length === 1 &&
+      paperOnly.value.getAttribute("label").includes("Test Journal"), "Paper-only mode included a note or lost the tag");
+    graph.removeCells(graph.getSelectionCells());
+    mode.value = "linked";
     const sourceRect = paperResult.getBoundingClientRect();
     const canvasRect = graph.container.getBoundingClientRect();
     const x = canvasRect.left + canvasRect.width * 0.3;
@@ -362,7 +406,7 @@ async function testDiagramAttachments() {
     assert(!graph.selectionCellsHandler.getHandler(paper)?.linkHint,
       "The floating link bar still appears under the paper");
 
-    panel.querySelector("select").value = "copy";
+    mode.value = "copy";
     const search = panel.querySelector("input");
     search.value = "Related note";
     search.dispatchEvent(new libraryTab.editor.Event("input", { bubbles: true }));
@@ -390,15 +434,38 @@ async function testDiagramAttachments() {
     const geometry = paper.geometry;
     const edge = graph.insertEdge(graph.getDefaultParent(), null, "", paper, detached);
     graph.setSelectionCell(paper);
-    const replace = await until(() => editorDoc.querySelector(".da-replace"), "Replacement is missing from the right sidebar");
+    const replace = await until(() => {
+      const panel = editorDoc.querySelector(".da-inspector");
+      return panel?.querySelector("textarea")?.value.includes("Smoke article") && panel.querySelector(".da-replace");
+    }, "Paper replacement is missing from the right sidebar");
     replace.click();
     const rightSearch = editorDoc.querySelector(".da-replace-picker input");
+    const dialog = rightSearch.closest("dialog");
+    assert(dialog.open && dialog.getBoundingClientRect().width > inspector.getBoundingClientRect().width &&
+      dialog.querySelector(".da-matches").clientHeight > 200, "The replacement results are still constrained to the inspector");
     rightSearch.value = "Replacement";
     rightSearch.dispatchEvent(new libraryTab.editor.Event("input", { bubbles: true }));
     const candidate = await until(() => editorDoc.querySelector(".da-matches .da-paper"), "Replacement search did not return a paper");
     candidate.click();
+    await until(() => !dialog.open, "Selecting a paper did not close the picker");
     assert(graph.getLinkForCell(paper) === replacementLink && paper.geometry === geometry && edge.source === paper &&
-      byLink(noteLink) === linked, "Replacement changed the node geometry, connection, or existing note");
+      byLink(noteLink) === linked && !paper.value.hasAttribute("zoteroPublisher"),
+    "Replacement changed the node geometry, connection, existing note, or kept the previous publisher");
+    graph.setSelectionCell(linked);
+    const replaceNote = await until(() => {
+      const inspector = editorDoc.querySelector(".da-inspector");
+      return inspector?.querySelector("textarea").readOnly && inspector.querySelector(".da-replace");
+    }, "Linked notes do not expose the replacement picker");
+    replaceNote.click();
+    const noteSearch = editorDoc.querySelector(".da-replace-picker input");
+    noteSearch.value = "Standalone note";
+    noteSearch.dispatchEvent(new libraryTab.editor.Event("input", { bubbles: true }));
+    const newNote = await until(() => editorDoc.querySelector(".da-matches .da-note"), "Note replacement returned no results");
+    newNote.click();
+    const standaloneNoteLink = "zotero://select/library/items/" + standaloneNote.key;
+    await until(() => byLink(standaloneNoteLink), "Replacing the note did not update its source");
+    assert(!graph.isCellEditable(linked) && linked.value.getAttribute("label").includes("Standalone note"),
+      "Note replacement lost its content or read-only mode");
     graph.setSelectionCell(detached);
     const pendingText = await until(() => {
       const input = editorDoc.querySelector(".da-inspector textarea");
@@ -409,12 +476,12 @@ async function testDiagramAttachments() {
     const libraryReopen = await openThroughLibrary(diagram);
     const reopenedGraph = libraryReopen.ui.editor.graph;
     const reopenedPaper = byLink(replacementLink, reopenedGraph);
-    assert(reopenedPaper && byLink(noteLink, reopenedGraph)?.getParent() === reopenedPaper.getParent() &&
+    assert(reopenedPaper && byLink(standaloneNoteLink, reopenedGraph)?.getParent() === reopenedPaper.getParent() &&
       byLink(secondNoteLink, reopenedGraph)?.getParent() === reopenedPaper.getParent() &&
       cells(reopenedGraph).some(cell => cell.value?.getAttribute?.("label")?.includes("Saved without leaving the text field")),
       "The group, replacement, or note edits did not survive reopening");
     await closeTab(libraryReopen.session);
-    await log("PASS vertical paper group, group move, bottom editor, both note modes, double-click, and save/reopen");
+    await log("PASS publisher tag, import modes, paper groups, paper/note replacement, reference opening, and save/reopen");
 
     const source = PathUtils.join(Zotero.Profile.dir, "existing.drawio");
     await IOUtils.writeUTF8(source, BLANK_DIAGRAM);
@@ -434,6 +501,8 @@ async function testDiagramAttachments() {
     "Native drag import did not produce a standalone attachment");
     await log("PASS creation, native drag import, attach, and detach");
 
+    await pane.selectItem(child.id);
+    await until(() => previewContent("blank"), "The child did not initially render as blank");
     const firstOpen = await openThroughLibrary(child);
     await pane.viewItems([child]);
     assert(sessions.get(child.id) === firstOpen.session, "Double opening created a second editing session");
@@ -445,6 +514,8 @@ async function testDiagramAttachments() {
     const { session, ui } = await openThroughLibrary(child);
     assert(!values(ui).includes("temporary vertex"), "Undo back to the original drawing was lost on close");
     addVertex(ui, "autosaved vertex");
+    const savedGraph = ui.editor.graph;
+    savedGraph.insertVertex(savedGraph.getDefaultParent(), null, "Distant vertex", -600, 120, 100, 40);
     await until(() => session.savedXML, "Drawing was not autosaved");
     const second = ui.insertPage();
     ui.selectPage(second);
@@ -456,7 +527,20 @@ async function testDiagramAttachments() {
     reopen.ui.selectPage(reopen.ui.pages[1]);
     assert(values(reopen.ui).includes("saved on close"), "Immediate tab close lost an edit");
     await closeTab(reopen.session);
-    await log("PASS double click, reuse, autosave, and immediate close");
+    await pane.selectItem(child.id);
+    const preview = await until(() => previewContent("rendered"), "The saved diagram did not render in the library");
+    const svg = preview.querySelector("#diagram svg");
+    assert(svg?.viewBox.baseVal.x <= -600 && svg.viewBox.baseVal.width >= 780 &&
+      svg.getBoundingClientRect().width > 0 && svg.getBoundingClientRect().width <= selectedPreview().clientWidth &&
+      preview.querySelector("#diagram").textContent.includes("autosaved vertex") &&
+      preview.querySelector("#diagram").textContent.includes("Distant vertex"),
+    "The preview did not fit both saved shapes inside the pane");
+    preview.querySelector("#next").click();
+    assert(preview.querySelector("#diagram").textContent.includes("saved on close") &&
+      preview.querySelector("#next").disabled, "Preview navigation did not render the second page");
+    await pane.selectItem(sourcePDF.id);
+    await until(() => !selectedPreview(), "Selecting a PDF retained the diagram preview");
+    await log("PASS double click, reuse, autosave, immediate close, and paginated whole-diagram preview");
 
     const diskEdit = BLANK_DIAGRAM.replace('name="Page-1"', 'name="External change"');
     const conflicted = await openThroughLibrary(diagram);

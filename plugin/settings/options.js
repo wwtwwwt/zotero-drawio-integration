@@ -18,7 +18,7 @@ var DrawioSettings = (() => {
     layout: ["kennedy", "atlas"],
     language: ["zotero", "zh", "en"],
     palette: ["zotero", "shapes"],
-    noteMode: ["copy", "linked"],
+    noteMode: ["none", "copy", "linked"],
   };
 
   // draw.io stores font family names inside semicolon-separated shape styles.

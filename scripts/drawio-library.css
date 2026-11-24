@@ -54,10 +54,18 @@
 .da-panel {
   position: absolute;
   inset: var(--da-tab-height) 0 0;
-  overflow: auto;
-  padding: 9px 8px;
+  display: flex;
+  flex-direction: column;
+  color-scheme: light;
   white-space: normal;
   font-size: 12px;
+}
+
+.da-library-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 9px 8px;
 }
 
 .da-block {
@@ -93,6 +101,19 @@
 .da-block-detail {
   margin-top: 3px;
   opacity: .75;
+}
+
+.da-block-publisher {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: 5px;
+  padding: 1px 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--da-rule);
+  border-radius: 4px;
+  background: var(--da-hover);
+  font-size: 11px;
+  white-space: normal;
 }
 
 .da-results > .da-block {
@@ -147,8 +168,7 @@
   outline-offset: -2px;
 }
 
-.da-content,
-.da-mode {
+.da-content {
   display: grid;
   gap: 3px;
 }
@@ -160,7 +180,18 @@
 }
 
 .da-mode {
-  margin: 7px 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  border-top: 1px solid var(--da-rule);
+  white-space: nowrap;
+}
+
+.geDarkMode .da-panel,
+.geDarkMode .da-replace-picker[open] {
+  color-scheme: dark;
 }
 
 .da-folders {
@@ -172,8 +203,7 @@
   border-bottom: 1px solid var(--da-rule);
 }
 
-.da-folders[hidden],
-.da-replace-picker[hidden] {
+.da-folders[hidden] {
   display: none;
 }
 
@@ -222,7 +252,8 @@
 }
 
 .da-inspector .da-action,
-.da-panel .da-action {
+.da-panel .da-action,
+.da-replace-picker .da-action {
   min-height: 26px;
   margin: 6px 4px 0 0;
   padding: 3px 6px;
@@ -238,12 +269,49 @@
   display: none;
 }
 
-.da-replace-picker {
-  margin-top: 6px;
+.da-replace-picker[open] {
+  --da-rule: color-mix(in srgb, currentColor 18%, transparent);
+  --da-hover: color-mix(in srgb, currentColor 8%, transparent);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  width: min(620px, calc(100vw - 32px));
+  height: min(500px, calc(100vh - 32px));
+  box-sizing: border-box;
+  padding: 16px;
+  border: 1px solid var(--da-rule);
+  border-radius: 8px;
+  color-scheme: light;
+  background: light-dark(#fff, #232323);
+  color: light-dark(#202124, #eee);
+  box-shadow: 0 12px 36px #0004;
+  font-size: 13px;
+  white-space: normal;
+}
+
+.da-replace-picker::backdrop {
+  background: #0005;
+}
+
+.da-replace-picker h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.da-replace-picker .da-input {
+  min-height: 34px;
+}
+
+.da-replace-picker .da-status {
+  margin: 0;
+}
+
+.da-replace-picker footer {
+  grid-row: 5;
+  text-align: end;
 }
 
 .da-matches {
-  max-height: 200px;
   overflow: auto;
 }
 
