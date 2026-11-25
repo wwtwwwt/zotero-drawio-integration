@@ -1,3 +1,5 @@
+[![Zotero 中文社区 · 已收录](https://zotero-chinese.com/badges/listed.svg)](https://zotero-chinese.com/plugins/)
+
 <img src="plugin/icons/diagram.png" alt="Zotero Draw.io 插件图标" width="96" height="96">
 
 # Zotero Draw.io Integration
@@ -11,7 +13,9 @@
 ## 安装
 
 1. 从 [GitHub Releases](https://github.com/wwtwwwt/zotero-drawio-integration/releases) 下载 `.xpi` 安装包，或按[构建说明](#构建与测试)在本地生成。
-2. 在 Zotero 中打开「工具 → 插件」，点击齿轮菜单中的「从文件安装插件」，选择 `.xpi` 文件。更新旧版时也使用这个入口。
+2. 在 Zotero 中打开「工具 → 插件」，点击齿轮菜单中的「从文件安装插件」，选择 `.xpi` 文件。
+
+从 v0.4.2 或更早的版本升级时，请手动覆盖安装一次 v0.4.3 或更新的正式版。之后即可通过 Zotero 的插件更新功能获取新版本。
 
 ## 使用
 
@@ -42,11 +46,20 @@ python3 scripts/build.py
 在包含发布工作流的提交上打 `vX.Y.Z` 格式的标签，并把标签推送到 GitHub。例如：
 
 ```sh
-git tag -a v0.4.1 -m 'Release v0.4.1'
-git push origin v0.4.1
+git tag -a v0.4.3 -m 'Release v0.4.3'
+git push origin v0.4.3
 ```
 
-GitHub Actions 会给 `v0.4.1` 创建 Release，并附上 `zotero-drawio-integration-0.4.1.xpi`。包内的插件版本也是 `0.4.1`。`plugin/manifest.json` 里的版本用于无标签的本地构建。要在本地预检正式包，可运行 `python3 scripts/build.py --release-tag v0.4.1`。
+GitHub Actions 会创建 Release，并同时上传 `.xpi` 和 `updates.json`。包内版本由标签决定。更新清单从已打包的 XPI 读取插件 ID、版本号和兼容范围，并记录对应版本的下载地址及 SHA-256。Zotero 从最新正式 Release 读取更新清单。
+
+本地预检正式包和更新清单可运行以下命令。
+
+```sh
+package="$(python3 scripts/build.py --release-tag v0.4.3)"
+python3 scripts/build_update_manifest.py "$package" --repo wwtwwwt/zotero-drawio-integration --tag v0.4.3
+```
+
+无标签的本地构建使用 `plugin/manifest.json` 中的开发版本号。
 
 ## 许可证
 

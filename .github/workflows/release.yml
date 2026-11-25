@@ -25,16 +25,19 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Build and verify the XPI
+      - name: Build the XPI and generate the update manifest
         id: build
         shell: bash
         run: |
           package="$(python3 scripts/build.py --release-tag "$GITHUB_REF_NAME")"
           unzip -tq "$package"
+          updates="$(python3 scripts/build_update_manifest.py "$package" --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME")"
           printf 'package=%s\n' "$package" >> "$GITHUB_OUTPUT"
+          printf 'updates=%s\n' "$updates" >> "$GITHUB_OUTPUT"
 
       - name: Publish the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           XPI: ${{ steps.build.outputs.package }}
-        run: gh release create "$GITHUB_REF_NAME" "$XPI" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+          UPDATES: ${{ steps.build.outputs.updates }}
+        run: gh release create "$GITHUB_REF_NAME" "$XPI" "$UPDATES" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes

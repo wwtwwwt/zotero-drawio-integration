@@ -7,7 +7,7 @@
   "applications": {
     "zotero": {
       "id": "diagram-attachments@zotero-drawio",
-      "update_url": "https://example.invalid/diagram-attachments/updates.json",
+      "update_url": "https://github.com/wwtwwwt/zotero-drawio-integration/releases/latest/download/updates.json",
       "strict_min_version": "8.0",
       "strict_max_version": "10.0.*"
     }
