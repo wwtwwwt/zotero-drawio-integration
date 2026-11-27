@@ -7,6 +7,7 @@ let pluginID;
 let originalOpen;
 let openDiagramAttachment;
 let removeIcons;
+let libraryObserver;
 
 function install() {}
 function uninstall() {}
@@ -28,6 +29,7 @@ function startup({ id, rootURI }) {
     }
   };
   Zotero.FileHandlers.open = openDiagramAttachment;
+  libraryObserver = observeDiagramLibrary();
   registerMenus();
   void registerDiagramSettings().catch(Zotero.logError);
   for (const window of Zotero.getMainWindows()) onMainWindowLoad({ window });
@@ -45,6 +47,11 @@ function onMainWindowLoad({ window }) {
     return kept;
   };
   tabs.getState = getState;
+  const focusDiagram = tab => {
+    sessions.get(tab.data.itemID)?.focusCanvas();
+  };
+  tabs.tabHooks.refocus[TAB_TYPE] = focusDiagram;
+  tabs.tabHooks.focusFirst[TAB_TYPE] = focusDiagram;
   tabs.tabHooks.getTitle[TAB_TYPE] = tab => {
     const item = Zotero.Items.get(tab.data.itemID);
     return item?.getField("title") || item?.attachmentFilename || tab.title;
@@ -58,6 +65,8 @@ function onMainWindowLoad({ window }) {
   const removeHooks = () => {
     removeUI();
     if (tabs.getState === getState) tabs.getState = originalState;
+    delete tabs.tabHooks.refocus[TAB_TYPE];
+    delete tabs.tabHooks.focusFirst[TAB_TYPE];
     delete tabs.tabHooks.getTitle[TAB_TYPE];
     delete tabs.tabHooks.undoClose[TAB_TYPE];
   };
@@ -81,6 +90,7 @@ function onMainWindowUnload({ window }) {
 async function shutdown() {
   if (Zotero.FileHandlers.open === openDiagramAttachment) Zotero.FileHandlers.open = originalOpen;
   if (!editorAssets) return;
+  Zotero.Notifier.unregisterObserver(libraryObserver);
   Zotero.MenuManager.unregisterMenu(pluginID + "-tools");
   Zotero.MenuManager.unregisterMenu(pluginID + "-items");
   removeIcons();

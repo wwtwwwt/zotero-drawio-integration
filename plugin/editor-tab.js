@@ -184,6 +184,7 @@ class DiagramTab {
       this.ready = true;
       this.stopLoading();
       this.render(this.issue ?? (canWrite(this.file.item) ? null : "readonly"));
+      this.focusCanvas();
     });
     listen("autosave", event => this.change(event.detail));
     listen("save", event => {
@@ -214,17 +215,22 @@ class DiagramTab {
     } catch {
       return;
     }
-    const { id, operation, query, kind, collectionID, offset, key, includeNotes } = request ?? {};
+    const { id, operation, query, kind, collectionID, offset, limit = 40, key, keys, includeNotes } = request ?? {};
     if (!Number.isSafeInteger(id)) return;
     const generation = this.searchGeneration;
     const libraryID = this.file.item.libraryID;
     let result;
     try {
       if (operation === "browse" && (collectionID === null || Number.isSafeInteger(collectionID)) &&
-          Number.isSafeInteger(offset) && offset >= 0) {
-        result = await browseDiagramLibrary(this, collectionID, offset);
+          Number.isSafeInteger(offset) && offset >= 0 && (collectionID !== null || offset === 0) &&
+          Number.isSafeInteger(limit) && limit > 0) {
+        result = await browseDiagramLibrary(this, collectionID, offset, limit);
       } else if (operation === "search" && typeof query === "string") {
         result = await searchDiagramLibrary(libraryID, query.trim().slice(0, 200), kind);
+      } else if (operation === "papers" && Array.isArray(keys) && keys.length <= 100) {
+        result = await getDiagramPapers(libraryID, keys);
+      } else if (operation === "children") {
+        result = await getDiagramChildren(libraryID, key);
       } else if (operation === "import") {
         result = await getDiagramImport(libraryID, key, includeNotes === true);
       } else {
@@ -260,6 +266,12 @@ class DiagramTab {
     const event = this.content.createEvent("CustomEvent");
     event.initCustomEvent(EVENT_PREFIX + name, false, false, detail);
     this.content.dispatchEvent(event);
+  }
+
+  focusCanvas() {
+    if (this.ready && !this.closed && this.window.Zotero_Tabs.selectedID === this.id) {
+      this.dispatch("focus-canvas");
+    }
   }
 
   loadEditor(xml) {

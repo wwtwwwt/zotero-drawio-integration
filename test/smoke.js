@@ -330,6 +330,18 @@ async function testDiagramAttachments() {
       Array.from(g.getChildVertices(parent)).flatMap(cell => [cell, ...cells(g, cell)]);
     const byLink = (link, g = graph) => cells(g).find(cell => g.getLinkForCell(cell) === link);
     const mode = panel.querySelector("select");
+    const inputWindow = Cu.unwaiveXrays(libraryTab.editor);
+    const clickRow = (row, count = 1) => {
+      row.scrollIntoView({ block: "nearest" });
+      const rect = row.getBoundingClientRect();
+      for (let click = 1; click <= count; click++) {
+        inputWindow.windowUtils.sendMouseEvent("mousedown", rect.left + 8, rect.top + 8, 0, click, 0);
+        inputWindow.windowUtils.sendMouseEvent("mouseup", rect.left + 8, rect.top + 8, 0, click, 0);
+      }
+    };
+    const badge = editorDoc.querySelector('.geTabContainer > a[href="https://github.com/jgraph/drawio"]');
+    assert(!badge || libraryTab.editor.getComputedStyle(badge).display === "none",
+      "The GitHub icon is visible in the page bar");
     assert(mode.closest(".da-mode") === panel.lastElementChild &&
       Array.from(mode.options, option => option.value).join() === "none,copy,linked",
     "The three import modes are not in the panel footer");
@@ -338,17 +350,86 @@ async function testDiagramAttachments() {
     assert(paperResult?.querySelector(".da-block-publisher")?.textContent === "Test Journal",
       "The article or publisher tag is missing from the selected collection");
     mode.value = "none";
-    paperResult.click();
-    const paperOnly = await until(() => byLink(paperLink), "Paper-only mode did not insert a paper");
+    clickRow(paperResult);
+    const children = await until(() => {
+      const details = paperResult.nextElementSibling;
+      return details?.textContent.includes("Paper source PDF") && details;
+    }, "Single click did not reveal the paper's attachments");
+    assert(!children.hidden && paperResult.getAttribute("aria-expanded") === "true" &&
+      children.querySelectorAll(".da-note").length === 2 && cells().length === 0,
+    "Single click did not show both child notes or inserted a cell");
+    clickRow(paperResult);
+    assert(children.hidden, "A second single click did not collapse the paper details");
+    clickRow(paperResult, 2);
+    const paperOnly = await until(() => byLink(paperLink), "Double-click did not insert a paper");
     assert(paperOnly.getParent() === graph.getDefaultParent() && cells().length === 1 &&
       paperOnly.value.getAttribute("label").includes("Test Journal"), "Paper-only mode included a note or lost the tag");
-    graph.removeCells(graph.getSelectionCells());
+    await until(() => graph.container.contains(editorDoc.activeElement), "Import did not return focus to the canvas");
+    tabs.select("zotero-pane");
+    tabs.select(libraryTab.session.id);
+    await until(() => graph.container.contains(editorDoc.activeElement) && window.document.activeElement === libraryTab.session.browser,
+      "Returning to the diagram did not restore canvas focus");
+
+    const keyboard = Cc["@mozilla.org/text-input-processor;1"].createInstance(Ci.nsITextInputProcessor);
+    assert(keyboard.beginInputTransactionForTests(window), "Could not initialize keyboard test input");
+    const keyPress = (key, code, keyCode, accel = false) => {
+      const modifier = Zotero.isMac
+        ? { key: "Meta", code: "MetaLeft", keyCode: 91, location: 1 }
+        : { key: "Control", code: "ControlLeft", keyCode: 17, location: 1 };
+      const modifierEvent = new window.KeyboardEvent("", modifier);
+      const event = new window.KeyboardEvent("", { key, code, keyCode });
+      const modifierFlags = keyboard.KEY_DONT_DISPATCH_MODIFIER_KEY_EVENT;
+      if (accel) keyboard.keydown(modifierEvent, modifierFlags);
+      try {
+        keyboard.keydown(event);
+        keyboard.keyup(event);
+      } finally {
+        if (accel) keyboard.keyup(modifierEvent, modifierFlags);
+      }
+    };
+    paperResult.focus();
+    keyPress("c", "KeyC", 67, true);
+    await Zotero.Promise.delay(25);
+    assert(!editorDoc.activeElement?.isContentEditable, "Copy left focus in the temporary clipboard control");
+    const sidebarControl = panel.querySelector('[data-paper-key="' + article.key + '"] > button');
+    sidebarControl.focus();
+    keyPress("v", "KeyV", 86, true);
+    await until(() => cells().length === 2, "Copy/paste shortcuts did not duplicate the selected graph cell");
+    assert(cells().every(cell => graph.getLinkForCell(cell) === paperLink), "Pasting lost the paper link");
+    panel.querySelector('[data-paper-key="' + article.key + '"] > button').focus();
+    keyPress("Delete", "Delete", 46);
+    assert(cells().length === 1,
+      "Delete did not remove the pasted shape while a sidebar control held focus");
+    graph.setSelectionCell(paperOnly);
+    const searchField = panel.querySelector("input");
+    searchField.focus();
+    searchField.value = "Test";
+    searchField.setSelectionRange(0, 4);
+    keyPress("Backspace", "Backspace", 8);
+    assert(searchField.value === "" && editorDoc.activeElement === searchField && cells().length === 1,
+      "Graph shortcuts captured input-field editing");
+    searchField.value = "Clipboard text";
+    searchField.select();
+    keyPress("c", "KeyC", 67, true);
+    searchField.value = "";
+    keyPress("v", "KeyV", 86, true);
+    assert(searchField.value === "Clipboard text" && cells().length === 1,
+      "Copy/paste in the search field did not use native text editing");
+    searchField.value = "";
+    graph.container.focus();
+    keyPress("Backspace", "Backspace", 8);
+    assert(cells().length === 0, "Backspace did not remove the selected paper from the canvas");
+    keyPress("v", "KeyV", 86, true);
+    await until(() => cells().some(cell => cell.value === "Clipboard text"),
+      "Pasting ordinary clipboard text did not create a text shape");
+    keyPress("x", "KeyX", 88, true);
+    assert(cells().length === 0, "Cut did not remove the selected shape");
+    await log("PASS canvas focus, copy/paste without modifier keydown, Delete/Backspace, and search field editing");
     mode.value = "linked";
     const sourceRect = paperResult.getBoundingClientRect();
     const canvasRect = graph.container.getBoundingClientRect();
     const x = canvasRect.left + canvasRect.width * 0.3;
     const y = canvasRect.top + canvasRect.height * 0.35;
-    const inputWindow = Cu.unwaiveXrays(libraryTab.editor);
     inputWindow.windowUtils.sendMouseEvent("mousedown", sourceRect.left + 5, sourceRect.top + 5, 0, 1, 0);
     inputWindow.windowUtils.sendMouseEvent("mousemove", x, y, 0, 0, 0);
     inputWindow.windowUtils.sendMouseEvent("mouseup", x, y, 0, 1, 0);
@@ -365,6 +446,8 @@ async function testDiagramAttachments() {
       cell.geometry.y >= stack[index].geometry.y + stack[index].geometry.height),
     "The paper and notes are not stacked vertically");
     assert(linked.value.getAttribute("label").includes("Second paragraph"), "The child note lost its content");
+    assert(linked.geometry.width < paper.geometry.width && other.geometry.height < 82 &&
+      String(graph.getCellStyle(linked).fontSize) === "11", "Imported notes are not compact");
     const inspector = await until(() => editorDoc.querySelector(".da-inspector"), "Selecting the group hid the paper editor");
     assert(inspector === libraryTab.ui.format.container.lastElementChild &&
       inspector.querySelector("textarea").value.includes("Smoke article"), "The paper editor is not at the bottom");
@@ -413,7 +496,7 @@ async function testDiagramAttachments() {
     const noteResult = await until(() => Array.from(panel.querySelectorAll(".da-results .da-note"))
       .find(row => row.textContent.includes("Related note")),
       "Unified search could not find the child note");
-    noteResult.click();
+    clickRow(noteResult, 2);
     const detached = await until(() => cells().find(cell =>
       cell.value?.getAttribute?.("zoteroKind") === "note" && !graph.getLinkForCell(cell)),
     "The copied note was not inserted without a source link");
@@ -433,7 +516,63 @@ async function testDiagramAttachments() {
 
     const geometry = paper.geometry;
     const edge = graph.insertEdge(graph.getDefaultParent(), null, "", paper, detached);
+    const originalPage = libraryTab.ui.currentPage;
+    const otherPage = libraryTab.ui.insertPage();
+    libraryTab.ui.selectPage(otherPage);
+    const offPagePaper = graph.addCell(graph.cloneCell(paper));
+    libraryTab.ui.selectPage(originalPage);
     graph.setSelectionCell(paper);
+    const collectionInfo = () => editorDoc.querySelector(".da-paper-collections")?.textContent;
+    await until(() => collectionInfo()?.includes(collection.name), "The inspector did not show the paper's collection");
+    search.value = "";
+    search.dispatchEvent(new libraryTab.editor.Event("input", { bubbles: true }));
+    const findPaper = () => panel.querySelector('[data-paper-key="' + article.key + '"] > button');
+    await until(findPaper, "The original collection did not reload");
+    const noteModeBeforeRefresh = mode.value;
+    const metadataHistorySize = libraryTab.ui.editor.undoManager.history.length;
+    const movedTo = new Zotero.Collection();
+    movedTo.name = "Moved papers";
+    movedTo.parentID = rootCollection.id;
+    await movedTo.saveTx();
+    article.setCollections([movedTo.id]);
+    article.setField("title", "Smoke article — updated");
+    article.setField("publicationTitle", "Updated Journal");
+    await article.saveTx();
+    await until(() => paper.value.getAttribute("label").includes("Smoke article — updated") &&
+      paper.value.getAttribute("zoteroPublisher") === "Updated Journal" &&
+      offPagePaper.value.getAttribute("zoteroPublisher") === "Updated Journal",
+    "Library metadata did not update the paper blocks on both pages");
+    await until(() => !findPaper() && collectionInfo()?.includes(movedTo.name),
+      "Moving the article did not refresh the sidebar and inspector");
+    assert(graph.getLinkForCell(paper) === paperLink && paper.geometry === geometry &&
+      edge.source === paper && libraryTab.ui.editor.undoManager.history.length === metadataHistorySize,
+    "Automatic metadata sync changed the link, geometry, connection, or undo history");
+    const movedFolder = panel.querySelector('[data-collection="' + movedTo.id + '"]');
+    assert(movedFolder, "The updated collection tree is missing the new collection");
+    movedFolder.click();
+    const movedPaper = await until(findPaper, "The paper did not appear in its destination collection");
+    clickRow(movedPaper);
+    await until(() => movedPaper.nextElementSibling?.textContent.includes("Paper source PDF"),
+      "The moved paper's children could not be expanded");
+    const paperText = editorDoc.querySelector(".da-inspector textarea");
+    paperText.value = "Smoke article — local text";
+    paperText.dispatchEvent(new libraryTab.editor.Event("change", { bubbles: true }));
+    movedTo.name = "Renamed papers";
+    await movedTo.saveTx();
+    sourcePDF.setField("title", "Renamed source PDF");
+    await sourcePDF.saveTx();
+    article.setField("publicationTitle", "Final Journal");
+    await article.saveTx();
+    await until(() => collectionInfo()?.includes(movedTo.name) &&
+      findPaper()?.querySelector(".da-block-publisher")?.textContent === "Final Journal" &&
+      findPaper()?.nextElementSibling?.textContent.includes("Renamed source PDF") &&
+      paper.value.getAttribute("zoteroPublisher") === "Final Journal",
+    "Publisher, renamed collection, or an expanded attachment failed to refresh");
+    assert(findPaper().getAttribute("aria-expanded") === "true" && mode.value === noteModeBeforeRefresh &&
+      paper.value.getAttribute("label").includes("Smoke article — local text"),
+    "Automatic refresh closed the expanded card, changed the import mode, or overwrote local text");
+    article.setCollections([collection.id]);
+    await article.saveTx();
     const replace = await until(() => {
       const panel = editorDoc.querySelector(".da-inspector");
       return panel?.querySelector("textarea")?.value.includes("Smoke article") && panel.querySelector(".da-replace");
@@ -480,12 +619,20 @@ async function testDiagramAttachments() {
       byLink(secondNoteLink, reopenedGraph)?.getParent() === reopenedPaper.getParent() &&
       cells(reopenedGraph).some(cell => cell.value?.getAttribute?.("label")?.includes("Saved without leaving the text field")),
       "The group, replacement, or note edits did not survive reopening");
+    libraryReopen.ui.selectPage(libraryReopen.ui.pages[1]);
+    assert(byLink(paperLink, reopenedGraph)?.value.getAttribute("zoteroPublisher") === "Final Journal",
+      "Synchronized metadata from the other page was not saved");
     await closeTab(libraryReopen.session);
-    await log("PASS publisher tag, import modes, paper groups, paper/note replacement, reference opening, and save/reopen");
+    await log("PASS paper disclosure, compact imports, live metadata/collection sync, and reference workflows");
 
     const source = PathUtils.join(Zotero.Profile.dir, "existing.drawio");
     await IOUtils.writeUTF8(source, BLANK_DIAGRAM);
-    await drop("application/x-moz-file", Zotero.File.pathToFile(source), view.getRowIndexByID(article.id));
+    await pane.collectionsView.selectCollection(collection.id);
+    const articleRow = await until(() => {
+      const index = view.getRowIndexByID(article.id);
+      return Number.isInteger(index) && view.getRow(index)?.ref.id === article.id ? { index } : null;
+    }, "The restored paper did not reappear in its original collection");
+    await drop("application/x-moz-file", Zotero.File.pathToFile(source), articleRow.index);
     const imported = Zotero.Items.get(article.getAttachments()).find(item => item.attachmentFilename === "existing.drawio");
     assert(imported?.isStoredFileAttachment(), "Native drag import did not produce a stored child");
     const importedPath = imported.getFilePath();

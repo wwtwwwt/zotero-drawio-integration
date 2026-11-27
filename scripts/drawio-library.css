@@ -121,6 +121,63 @@
   margin-top: 6px;
 }
 
+.da-paper-entry {
+  margin-top: 6px;
+}
+
+.da-paper-entry > .da-paper {
+  position: relative;
+  width: 100%;
+  padding-inline-end: 24px;
+}
+
+.da-paper-entry > .da-paper::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 11px;
+  inset-inline-end: 10px;
+  width: 5px;
+  height: 5px;
+  border-block-end: 1px solid currentColor;
+  border-inline-end: 1px solid currentColor;
+  transform: rotate(-45deg);
+  opacity: .75;
+}
+
+.da-paper-entry > .da-paper[aria-expanded="true"]::after {
+  transform: rotate(45deg);
+}
+
+.da-paper-children {
+  margin: 4px 0 4px 10px;
+  padding: 3px 0 3px 8px;
+  border-inline-start: 1px solid var(--da-rule);
+}
+
+.da-child-label {
+  margin-block: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.da-attachments {
+  margin: 0 0 8px;
+  padding-inline-start: 16px;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+.da-paper-children > .da-note {
+  display: block;
+  width: 100%;
+  margin-block: 4px;
+  padding-block: 4px;
+}
+
+.geTabContainer > a[href="https://github.com/jgraph/drawio"] {
+  display: none !important;
+}
+
 .da-status {
   margin: 7px 0;
   opacity: .78;
@@ -147,6 +204,12 @@
 .da-inspector h3 {
   margin: 0 0 6px;
   font-size: 12px;
+}
+
+.da-paper-collections {
+  margin: 6px 0 0;
+  opacity: .75;
+  overflow-wrap: anywhere;
 }
 
 .da-input {

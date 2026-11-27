@@ -82,8 +82,15 @@ window.addEventListener("message", (event) => {
 
 document.documentElement.dataset.diagramHostReady = "true";
 
-document.addEventListener(prefix + "library-results", ({ detail }) => {
-  frame?.contentWindow.postMessage(detail, origin);
+for (const event of ["library-results", "library-changed"]) {
+  document.addEventListener(prefix + event, ({ detail }) => {
+    frame?.contentWindow.postMessage(detail, origin);
+  });
+}
+
+document.addEventListener(prefix + "focus-canvas", () => {
+  const canvas = frame?.contentDocument?.querySelector(".geDiagramContainer");
+  canvas?.focus({ preventScroll: true });
 });
 
 document.addEventListener(prefix + "flush", () => {

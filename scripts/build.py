@@ -105,8 +105,10 @@ def build(version=None):
                     replacement = (
                         b"mxscript('js/zotero-snapshot.js', function() {\n"
                         b"                    mxscript('js/zotero-library.js', function() {\n"
-                        b"                        mxScriptsLoaded = true;\n"
-                        b"                        checkAllLoaded();\n"
+                        b"                        mxscript('js/zotero-shortcuts.js', function() {\n"
+                        b"                            mxScriptsLoaded = true;\n"
+                        b"                            checkAllLoaded();\n"
+                        b"                        });\n"
                         b"                    });\n"
                         b"                });"
                     )
@@ -116,6 +118,7 @@ def build(version=None):
                 add(package, f"editor/{name}", data)
             add(package, "editor/js/zotero-snapshot.js", (ROOT / "scripts/drawio-snapshot.js").read_bytes())
             add(package, "editor/js/zotero-library.js", (ROOT / "scripts/drawio-library.js").read_bytes())
+            add(package, "editor/js/zotero-shortcuts.js", (ROOT / "scripts/drawio-shortcuts.js").read_bytes())
             add(package, "editor/styles/zotero-library.css", (ROOT / "scripts/drawio-library.css").read_bytes())
             add(package, "editor/LICENSE", license_path.read_bytes())
             add(package, "editor/UPSTREAM.txt", (

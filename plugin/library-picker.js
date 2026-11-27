@@ -30,29 +30,71 @@ async function resolveDiagramItem(libraryID, key) {
   return canImportItem(item) ? item : null;
 }
 
-async function browseDiagramLibrary(session, collectionID, offset) {
+function observeDiagramLibrary() {
+  return Zotero.Notifier.registerObserver({
+    notify(event, type, ids, extraData) {
+      if (!["add", "modify", "delete", "trash", "remove"].includes(event) || !sessions.size) return;
+      const libraries = new Set();
+      for (const id of ids) {
+        const object = type === "item" ? Zotero.Items.get(id)
+          : Zotero.Collections.get(type === "collection-item" ? Number(String(id).split("-")[0]) : id);
+        libraries.add(object?.libraryID ?? extraData?.[id]?.libraryID);
+      }
+      for (const session of sessions.values()) {
+        if (session.ready && !session.closed && !session.window.closed &&
+            (libraries.has(session.file.item.libraryID) || libraries.has(undefined))) {
+          session.dispatch("library-changed", '{"action":"library-changed"}');
+        }
+      }
+    },
+  }, ["item", "collection", "collection-item"], "drawio-library");
+}
+
+async function getDiagramPapers(libraryID, keys) {
+  const items = (await Promise.all([...new Set(keys)].map(key => resolveDiagramItem(libraryID, key))))
+    .filter(item => item?.isRegularItem());
+  await Zotero.Items.loadDataTypes(items, ["itemData", "collections"]);
+  return { items: items.map(item => ({
+    ...itemSummary(item),
+    collections: item.getCollections().map(id => Zotero.Collections.get(id).name),
+  })) };
+}
+
+async function getDiagramChildren(libraryID, key) {
+  const paper = await resolveDiagramItem(libraryID, key);
+  if (!paper?.isRegularItem()) throw new Error("Paper is unavailable");
+  await Zotero.Items.loadDataTypes([paper], ["childItems"]);
+  const [attachments, notes] = await Promise.all([
+    Zotero.Items.getAsync(paper.getAttachments()),
+    Zotero.Items.getAsync(paper.getNotes()),
+  ]);
+  await Zotero.Items.loadDataTypes([...attachments, ...notes], ["itemData"]);
+  return {
+    attachments: attachments.map(item => item.getDisplayTitle() || item.attachmentFilename),
+    notes: notes.filter(canImportItem).map(itemSummary),
+  };
+}
+
+async function browseDiagramLibrary(session, collectionID, offset, limit) {
   const attachment = session.file.item;
   const libraryID = attachment.libraryID;
-  let collections;
+  const collections = offset === 0 ? Zotero.Collections.getByLibrary(libraryID, true) : null;
   if (collectionID === null) {
-    collections = Zotero.Collections.getByLibrary(libraryID, true);
     const owner = attachment.parentItem || attachment;
     await Zotero.Items.loadDataTypes([owner], ["collections"]);
     const membership = new Set(owner.getCollections());
     const selected = selectedDiagramCollections(session.window.ZoteroPane).find(col => membership.has(col.id));
     collectionID = selected?.id ?? collections.find(col => membership.has(col.id))?.id ?? 0;
   }
-  const collection = collectionID ? Zotero.Collections.get(collectionID) : null;
-  if (collectionID && (!collection || collection.deleted || collection.libraryID !== libraryID)) {
-    throw new Error("Collection is unavailable");
-  }
+  let collection = collectionID ? Zotero.Collections.get(collectionID) : null;
+  if (collection?.deleted || collection?.libraryID !== libraryID) collection = null;
+  collectionID = collection?.id ?? 0;
   if (collection) await Zotero.Collections.loadDataTypes([collection], ["childItems"]);
   const entries = collection ? collection.getChildItems() : await Zotero.Items.getAll(libraryID, true);
   const items = entries.filter(canImportItem);
-  const pageSize = 40;
-  const page = items.slice(offset, offset + pageSize);
+  const page = items.slice(offset, offset + limit);
   await Zotero.Items.loadDataTypes(page, ["itemData"]);
-  const result = { collectionID, items: page.map(itemSummary), more: items.length > offset + pageSize };
+  const result = { collectionID, items: page.map(itemSummary), more: items.length > offset + limit };
   if (collections) {
     result.libraryName = attachment.library.name;
     result.collections = collections.map(col => ({ id: col.id, parentID: col.parentID || 0, name: col.name }));
